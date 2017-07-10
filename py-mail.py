@@ -51,8 +51,8 @@ def in_str(text, haystack):
 def __load_file__(filename):
 	result = None
 
-	def make_mbox_generator(mbox):
-		for msg in mbox.values():
+	def make_mbox_generator(values):
+		for msg in values:
 			yield email.message_from_string(msg.as_string())
 
 	if cache["filename"] != filename:
@@ -63,11 +63,12 @@ def __load_file__(filename):
 			# try to load mbox file:
 			if ext == "" or ext.lower() == ".mbox":
 				mbox = mailbox.mbox(filename)
+				values = mbox.values()
 
-				if len(mbox) > 0:
-					result = make_mbox_generator(mbox)
+				if len(values) > 0:
+					result = make_mbox_generator(values)
 					cache["format"] = "mbox"
-					cache["messages"] = mbox
+					cache["messages"] = values
 
 			# no mbox file loaded => try to create single message from file:
 			if result is None:
