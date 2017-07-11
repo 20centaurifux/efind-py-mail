@@ -229,22 +229,34 @@ def mail_date_after(filename, key, datestr):
 
 mail_date_after.__signature__=[str, str]
 
-mail_from = lambda f, q: mail_check_header(f, "From", q)
+def mail_from(filename, value):
+	return mail_check_header(filename, "From", value)
+
 mail_from.__signature__=[str]
 
-mail_to = lambda f, q: mail_check_header(f, "To", q)
+def mail_to(filename, value):
+	return mail_check_header(filename, "To", value)
+
 mail_to.__signature__=[str]
 
-mail_subject = lambda f, q: mail_check_header(f, "Subject", q)
+def mail_subject(filename, value):
+	return mail_check_header(filename, "Subject", value)
+
 mail_subject.__signature__=[str]
 
-mail_sent = lambda f, q: mail_date_equals(f, "Date", q)
+def mail_sent(filename, value):
+	return mail_date_equals(filename, "Date", value)
+
 mail_sent.__signature__=[str]
 
-mail_sent_before = lambda f, q: mail_date_before(f, "Date", q)
+def mail_sent_before(filename, value):
+	return mail_date_before(filename, "Date", value)
+
 mail_sent_before.__signature__=[str]
 
-mail_sent_after = lambda f, q: mail_date_after(f, "Date", q)
+def mail_sent_after(filename, value):
+	return mail_date_after(filename, "Date", value)
+
 mail_sent_after.__signature__=[str]
 
 EXTENSION_EXPORT=[mail_check_header,
