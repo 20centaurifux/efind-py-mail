@@ -93,13 +93,13 @@ Tests if at least one found message has been sent on *date*.
 
 Tests if at least one found message has been sent before *date*.
 
-	$ efind . 'mail_sent("2017-01-01")
+	$ efind . 'mail_sent_before("2017-01-01")
 
 ### mail\_sent\_after(string: date)
 
 Tests if at least one found message has been sent after *date*.
 
-	$ efind . 'mail_sent("2017-01-01 10:36")
+	$ efind . 'mail_sent_after("2017-01-01 10:36")
 
 ## Installation
 
