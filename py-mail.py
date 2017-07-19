@@ -104,10 +104,13 @@ def mail_contains(filename, query):
         if msg.get_content_type() == "text/plain":
             text = None
 
-            if msg.get("Content-Transfer-Encoding") == "base64":
-                text = base64.b64decode(msg.get_payload())
-            else:
-                text = msg.get_payload()
+            try:
+                if msg.get("Content-Transfer-Encoding") == "base64":
+                    text = base64.b64decode(msg.get_payload())
+                else:
+                    text = msg.get_payload()
+            except:
+                pass
 
             if not text is None:
                 return query in text
