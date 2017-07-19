@@ -3,7 +3,9 @@
 ## Introduction
 
 This extension for [efind](https://github.com/20centaurifux/efind) provides
-functions to filter emails. It can read message from eml and mailbox files.
+functions to filter emails. It can read messages from plain text and mailbox
+files. This makes it possible to search emails stored in a Maildir folder,
+for example.
 
 ## Date strings
 
