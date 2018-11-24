@@ -26,7 +26,7 @@
 import os, email, base64, re, datetime, mailbox
 
 EXTENSION_NAME="py-mail"
-EXTENSION_VERSION="0.1.0"
+EXTENSION_VERSION="0.2.0"
 EXTENSION_DESCRIPTION="Filter emails by header and body."
 
 cache = {"filename": "", "content": None}
@@ -48,7 +48,7 @@ def in_str(text, haystack):
     return False
 
 # Loads messages from a file.
-def __load_file__(filename):
+def load_file(filename):
     result = None
 
     def make_mbox_generator(values):
@@ -57,7 +57,6 @@ def __load_file__(filename):
 
     if cache["filename"] != filename:
         try:
-            # get file extension:
             _, ext = os.path.splitext(filename)
 
             # try to load mbox file:
@@ -67,17 +66,22 @@ def __load_file__(filename):
 
                 if len(values) > 0:
                     result = make_mbox_generator(values)
+
                     cache["format"] = "mbox"
                     cache["messages"] = values
+                    cache["filename"] = filename
 
             # no mbox file loaded => try to create single message from file:
             if result is None:
                 with open(filename) as f:
-                    result = [email.message_from_file(f)]
-                    cache["format"] = "message"
-                    cache["messages"] = result
+                    msg = email.message_from_file(f)
 
-            cache["filename"] = filename
+                    if len(msg._headers) > 0:
+                      result = [msg]
+
+                      cache["format"] = "message"
+                      cache["messages"] = result
+                      cache["filename"] = filename
 
         except:
             pass
@@ -89,23 +93,21 @@ def __load_file__(filename):
 
     return result
 
-def mail_check_header(filename, key, value):
-    return some(lambda m: in_str(m.get(key), value), __load_file__(filename))
+def mail_check_header(filename: str, key: str, value: str):
+    return some(lambda m: in_str(m.get(key), value), load_file(filename))
 
-mail_check_header.__signature__=[str, str]
+def mail_has_header(filename: str, key: str):
+    return some(lambda m: m.has_key(key), load_file(filename))
 
-def mail_has_header(filename, key):
-    return some(lambda m: m.has_key(key), __load_file__(filename))
-
-mail_has_header.__signature__=[str]
-
-def mail_contains(filename, query):
+def mail_contains(filename: str, query: str):
     def search_payload(msg, query):
         if msg.get_content_type() == "text/plain":
             text = None
 
             try:
-                if msg.get("Content-Transfer-Encoding") == "base64":
+                encoding = msg.get("Content-Transfer-Encoding")
+
+                if encoding == "base64":
                     text = base64.b64decode(msg.get_payload())
                 else:
                     text = msg.get_payload()
@@ -113,6 +115,9 @@ def mail_contains(filename, query):
                 pass
 
             if not text is None:
+                if isinstance(text, bytes):
+                    query = bytearray(query, "utf-8")
+
                 return query in text
 
         return False
@@ -124,28 +129,24 @@ def mail_contains(filename, query):
             elif msg.is_multipart():
                 return some(lambda p: search_payload(p, query), msg.walk())
 
-    return some(lambda m: search_message(m, query), __load_file__(filename))
+    return some(lambda m: search_message(m, query), load_file(filename))
 
-mail_contains.__signature__=[str]
-
-def mail_find_attachment(filename, query):
-    content = __load_file__(filename)
+def mail_find_attachment(filename: str, query: str):
+    content = load_file(filename)
 
     f = lambda p: p.get_filename() is not None and in_str(p.get_filename(), query)
 
     return some(lambda m: m.is_multipart() and some(f, m.walk()), content)
 
-mail_find_attachment.__signature__=[str]
-
-def mail_has_attachment(filename):
-    content = __load_file__(filename)
+def mail_has_attachment(filename: str):
+    content = load_file(filename)
 
     f = lambda p: p.get_filename() is not None
 
     return some(lambda m: m.is_multipart() and some(f, m.walk()), content)
 
 # Converts a date string (yyyy-MM-dd HH:mm:ss) to a N-tuple.
-def __parse_time_arg__(arg):
+def parse_time_arg(arg):
     t = None
 
     groups = [r"(\d{4})", r"-(\d{1,2})", r"-(\d{1,2})", r" (\d{1,2})", r":(\d{1,2})", r":(\d{1,2})"]
@@ -156,11 +157,12 @@ def __parse_time_arg__(arg):
         m = re.match("^%s$" % pattern, arg)
 
         if not m is None:
-            t = map(int, m.groups())
+            t = list(map(int, m.groups()))
 
             if m.lastindex >= 3:
                 try:
-                    apply(datetime.datetime, t + [0] * (6 - len(t)))
+                    args = t + [0] * (6 - len(t))
+                    datetime.datetime(*args)
                 except:
                     t = None
             elif m.lastindex == 2 and (int(m.group(2)) < 0 or int(m.group(2)) > 12):
@@ -169,7 +171,7 @@ def __parse_time_arg__(arg):
     return t
 
 # Converts a found date header to a 6-tuple.
-def __parse_date_header__(value):
+def parse_date_header(value):
     t = None
 
     if not value is None:
@@ -187,17 +189,17 @@ def __parse_date_header__(value):
     return t
 
 # Compares a date string (yyyy-MM-dd HH:mm:ss) to the value of the given header.
-def __compare_dates__(msg, key, datestr, pred):
+def compare_dates(msg, key, datestr, pred):
     v = msg.get(key)
-    a = __parse_time_arg__(datestr)
-    b = __parse_date_header__(v)
+    a = parse_time_arg(datestr)
+    b = parse_date_header(v)
 
     if not a is None and not b is None:
         if len(a) >= 3:
             b = b[:len(a)] + ([0] * (6 - len(a)))
             a = a + ([0] * (6 - len(a)))
 
-            a, b = map(lambda t: apply(datetime.datetime, t), [a, b])
+            a, b = map(lambda t: datetime.datetime(*t), [a, b])
 
             return pred(a, b)
         elif len(a) == 2:
@@ -207,60 +209,45 @@ def __compare_dates__(msg, key, datestr, pred):
 
     return False
 
-def mail_date_equals(filename, key, datestr):
+def mail_date_equals(filename: str, key: str, datestr: str):
     def date_equals(msg, key, datestr):
         v = msg.get(key)
-        a = __parse_time_arg__(datestr)
-        b = __parse_date_header__(v)
+        a = parse_time_arg(datestr)
+        b = parse_date_header(v)
+
+        print(a)
+        print(b)
 
         if not a is None and not b is None:
             return a == b[:len(a)]
 
         return False
 
-    return some(lambda m: date_equals(m, key, datestr), __load_file__(filename))
+    return some(lambda m: date_equals(m, key, datestr), load_file(filename))
 
-mail_date_equals.__signature__=[str, str]
+def mail_date_before(filename: str, key: str, datestr: str):
+    return some(lambda m: compare_dates(m, key, datestr, lambda a, b: a > b), load_file(filename))
 
-def mail_date_before(filename, key, datestr):
-    return some(lambda m: __compare_dates__(m, key, datestr, lambda a, b: a > b), __load_file__(filename))
+def mail_date_after(filename: str, key: str, datestr: str):
+    return some(lambda m: compare_dates(m, key, datestr, lambda a, b: a < b), load_file(filename))
 
-mail_date_before.__signature__=[str, str]
-
-def mail_date_after(filename, key, datestr):
-    return some(lambda m: __compare_dates__(m, key, datestr, lambda a, b: a < b), __load_file__(filename))
-
-mail_date_after.__signature__=[str, str]
-
-def mail_from(filename, value):
+def mail_from(filename: str, value: str):
     return mail_check_header(filename, "From", value)
 
-mail_from.__signature__=[str]
-
-def mail_to(filename, value):
+def mail_to(filename: str, value: str):
     return mail_check_header(filename, "To", value)
 
-mail_to.__signature__=[str]
-
-def mail_subject(filename, value):
+def mail_subject(filename: str, value: str):
     return mail_check_header(filename, "Subject", value)
 
-mail_subject.__signature__=[str]
-
-def mail_sent(filename, value):
+def mail_sent(filename: str, value: str):
     return mail_date_equals(filename, "Date", value)
 
-mail_sent.__signature__=[str]
-
-def mail_sent_before(filename, value):
+def mail_sent_before(filename: str, value: str):
     return mail_date_before(filename, "Date", value)
 
-mail_sent_before.__signature__=[str]
-
-def mail_sent_after(filename, value):
+def mail_sent_after(filename: str, value: str):
     return mail_date_after(filename, "Date", value)
-
-mail_sent_after.__signature__=[str]
 
 EXTENSION_EXPORT=[mail_check_header,
                   mail_has_header,
